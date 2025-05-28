@@ -1,5 +1,5 @@
 
-# DCT vs DWT Image Compression – CS576 Assignment 3
+# DCT vs DWT Image Compression
 
 This project compares image compression techniques using **Discrete Cosine Transform (DCT)** and **Discrete Wavelet Transform (DWT)**. It processes a 512x512 RGB image and demonstrates how compression affects image quality by progressively using fewer coefficients.
 
