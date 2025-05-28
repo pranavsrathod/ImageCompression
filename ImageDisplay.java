@@ -1,0 +1,630 @@
+
+import java.awt.*;
+import java.awt.image.*;
+import java.io.*;
+import javax.swing.*;
+
+
+public class ImageDisplay {
+
+	JFrame frame;
+	JLabel lbIm1;
+	BufferedImage imgOne, imgTwo;
+
+	// Modify the height and width values here to read and display an image with
+  	// different dimensions. 
+	int width = 512;
+	int height = 512;
+
+	int[][] red = new int[height][width];
+	int[][] green = new int[height][width];
+	int[][] blue = new int[width][width];
+	
+	double[][] redDWT = new double[height][width];
+	double[][] greenDWT = new double[height][width];
+	double[][] blueDWT = new double[width][width];
+
+	double[][] redDCT = new double[height][width];
+	double[][] greenDCT = new double[height][width];
+	double[][] blueDCT = new double[width][width];
+
+	private static final int[][] ZIG_ZAG_ORDER = {
+		{0, 0}, {0, 1}, {1, 0}, {2, 0}, {1, 1}, {0, 2}, {0, 3}, {1, 2},
+		{2, 1}, {3, 0}, {4, 0}, {3, 1}, {2, 2}, {1, 3}, {0, 4}, {0, 5},
+		{1, 4}, {2, 3}, {3, 2}, {4, 1}, {5, 0}, {6, 0}, {5, 1}, {4, 2},
+		{3, 3}, {2, 4}, {1, 5}, {0, 6}, {0, 7}, {1, 6}, {2, 5}, {3, 4},
+		{4, 3}, {5, 2}, {6, 1}, {7, 0}, {7, 1}, {6, 2}, {5, 3}, {4, 4},
+		{3, 5}, {2, 6}, {1, 7}, {2, 7}, {3, 6}, {4, 5}, {5, 4}, {6, 3},
+		{7, 2}, {7, 3}, {6, 4}, {5, 5}, {4, 6}, {3, 7}, {4, 7}, {5, 6},
+		{6, 5}, {7, 4}, {7, 5}, {6, 6}, {5, 7}, {6, 7}, {7, 6}, {7, 7}
+	};
+	
+
+	/** Read Image RGB
+	 *  Reads the image of given width and height at the given imgPath into the provided BufferedImage.
+	 */
+	
+	private double dctCoeff(int i){
+		if (i == 0){
+			return 1.0/Math.sqrt(2);
+		} else {
+			return 1;
+		}
+	}
+
+	private void resetRGB(int[][] originalRed, int[][] originalGreen, int[][] originalBlue) {
+		for (int i = 0; i < height; i++) {
+			System.arraycopy(originalRed[i], 0, red[i], 0, width);
+			System.arraycopy(originalGreen[i], 0, green[i], 0, width);
+			System.arraycopy(originalBlue[i], 0, blue[i], 0, width);
+		}
+	}
+	private int[][] copyArray(int[][] original) {
+		int[][] copy = new int[original.length][original[0].length];
+		for (int i = 0; i < original.length; i++) {
+			System.arraycopy(original[i], 0, copy[i], 0, original[0].length);
+		}
+		return copy;
+	}
+	private double[][] copyArray(double[][] original) {
+		double[][] copy = new double[original.length][original[0].length];
+		for (int i = 0; i < original.length; i++) {
+			System.arraycopy(original[i], 0, copy[i], 0, original[0].length);
+		}
+		return copy;
+	}
+
+	private int[][] returnBlock(int Y, int X, int[][] colorChannel){
+		int[][] block = new int[8][8];
+    	for (int y = 0; y < 8; y++) {
+			for (int x = 0; x < 8; x++) {
+				block[y][x] = colorChannel[Y + y][X + x];
+			}
+		}
+		return block;
+	}
+	private double[][] returnDoubleBlock(int Y, int X, double[][] dctCoeff){
+		double[][] block = new double[8][8];
+    	for (int y = 0; y < 8; y++) {
+			for (int x = 0; x < 8; x++) {
+				block[y][x] = dctCoeff[Y + y][X + x];
+			}
+		}
+		return block;
+	}
+
+	// debug methods for DCT
+	private void printBlock(int[][] block) {
+		for (int y = 0; y < block.length; y++) {
+			for (int x = 0; x < block[0].length; x++) {
+				System.out.printf("%4d ", block[y][x]);
+			}
+			System.out.println();
+		}
+	}
+
+	private void printBlock(double[][] block) {
+		for (int y = 0; y < block.length; y++) {
+			for (int x = 0; x < block[0].length; x++) {
+				System.out.printf("%8.2f ", block[y][x]);
+			}
+			System.out.println();
+		}
+	}
+
+
+	void performDCT(int Y, int X, int[][] colorChannel, double [][] dctCoeff){
+		double[][] dctBlock = new double[8][8];
+		int[][] block = returnBlock(Y, X, colorChannel);
+		// printBlock(block);
+		for (int u = 0; u < 8; u++) {
+			for (int v = 0; v < 8; v++) {
+				double sum = 0.0;
+				for (int x = 0; x < 8; x++) {
+					for (int y = 0; y < 8; y++) {
+						sum += block[y][x] * (Math.cos(((2 * x + 1) * u * Math.PI)/16) * Math.cos(((2 * y + 1) * v * Math.PI) / 16));
+					}
+				}
+				dctBlock[u][v] = ((1/4.0) * dctCoeff(u) * dctCoeff(v)) * sum;
+				dctCoeff[Y + u][X + v] = dctBlock[u][v];
+				// System.out.print(dctBlock[u][v] + " ");
+			}
+			// System.out.println();
+		}
+		// printBlock(dctBlock);
+    }
+		
+	private void DCT(){
+
+		// performDCT(0, 0, red);
+		// System.out.println(red[0][1]);
+		// // performDCT(y, x, green);
+		// // performDCT(y, x, blue);
+		// performDCT(0, 0, red, redDCT);
+		for (int y = 0; y < height; y+=8){
+			for (int x = 0; x < width; x+= 8){
+				// System.out.print("(" + y + "," + x + ") ");
+				performDCT(y, x, red, redDCT);
+				performDCT(y, x, green, greenDCT);
+				performDCT(y, x, blue, blueDCT);
+			}
+		}
+	}
+	private void performIDCT(int Y, int X, int[][] colorChannel, double[][] dctCoeff, int m){
+		double[][] block = returnDoubleBlock(Y, X, dctCoeff);
+		// System.out.println(m);
+		double[][] newBlock = new double[8][8];
+		for (int i = 0; i < 64; i++){
+			int u = ZIG_ZAG_ORDER[i][0];
+			int v = ZIG_ZAG_ORDER[i][1];
+			if (i < m){
+				newBlock[u][v] = block[u][v];
+			} else {
+				newBlock[u][v] = 0;
+			}
+		}
+		// System.out.println("\n IDCT ");
+		// printBlock(newBlock);
+		for (int x = 0; x < 8; x++){
+			for (int y = 0; y < 8; y++){
+				double sum = 0.0;
+				for (int u = 0; u < 8; u++) {
+					for (int v = 0; v < 8; v++) {
+						sum += dctCoeff(u) * dctCoeff(v) * newBlock[u][v] * 
+						Math.cos(((2 * x + 1) * u * Math.PI)/ 16) *
+						Math.cos(((2 * y + 1) * v * Math.PI)/ 16);
+					}
+				}
+				int value = (int) Math.round(sum / 4);
+				colorChannel[Y + y][X + x] = Math.min(255, Math.max(0, value));
+			}
+		}
+		// int[][] finalBlock = returnBlock(Y, X, colorChannel);
+		// printBlock(finalBlock);
+
+	}
+
+	private void iDCT(int n){
+		int m = (int) Math.round(n/4096.0);
+		// performIDCT(0, 0, red, redDCT, m);
+		for (int y = 0; y < height; y+=8){
+			for (int x = 0; x < width; x+= 8){
+				performIDCT(y, x, red, redDCT, m);
+				performIDCT(y, x, green, greenDCT, m);
+				performIDCT(y, x, blue, blueDCT, m);
+			}
+		}
+	}
+
+	private double[][] intToDouble(int[][] intArray) {
+		int height = intArray.length;
+		int width = intArray[0].length;
+		double[][] doubleArray = new double[height][width];
+	
+		for (int i = 0; i < height; i++) {
+			for (int j = 0; j < width; j++) {
+				doubleArray[i][j] = intArray[i][j];
+			}
+		}
+		return doubleArray;
+	}
+
+	private int[][] doubleToInt(double[][] doubleArray) {
+		int height = doubleArray.length;
+		int width = doubleArray[0].length;
+		int[][] intArray = new int[height][width];
+	
+		for (int i = 0; i < height; i++) {
+			for (int j = 0; j < width; j++) {
+				intArray[i][j] = (int) Math.min(255, Math.max(0, doubleArray[i][j]));
+			}
+		}
+		return intArray;
+	}
+
+
+	private double[][] transformRow(double[][] colorChannel, int level) {
+		double[][] transformedRow = new double[height][width];
+	
+		// Copy unchanged rows
+		for (int i = 0; i < height; i++) {
+			transformedRow[i] = colorChannel[i].clone();
+		}
+	
+		int dev = (int) Math.pow(2, level);
+		int startRow = height - (height / dev);
+		int endCol = width / dev;
+		int half = endCol / 2;
+	
+		// Transform rows in the relevant region
+		for (int i = startRow; i < height; i++) {
+			double[] row = colorChannel[i];
+			for (int j = 0; j < half; j++) {
+				double val1 = row[2 * j];
+				double val2 = row[2 * j + 1];
+	
+				transformedRow[i][j] = (val1 + val2) / 2.0;  // Low-pass
+				transformedRow[i][j + half] = (val1 - val2)/2.0;   // High-pass
+			}
+		}
+		return transformedRow;
+	}
+
+	private double[][] transformColumn(double[][] colorChannel, int level) {
+		double[][] transformedImage = new double[height][width];
+	
+		// Copy unchanged columns
+		for (int i = 0; i < height; i++) {
+			transformedImage[i] = colorChannel[i].clone();
+		}
+	
+		int dev = (int) Math.pow(2, level);
+		int startRow = height - (height / dev);
+		int endCol = width / dev;
+		int half = (height / dev) / 2;
+	
+		// Transform columns in the relevant region
+		for (int j = 0; j < endCol; j++) {
+			for (int i = startRow; i < startRow + half; i++) {
+				int relativeIndex = i - startRow;
+	
+				double val1 = colorChannel[startRow + 2 * relativeIndex][j];
+				double val2 = colorChannel[startRow + 2 * relativeIndex + 1][j];
+	
+				transformedImage[startRow + relativeIndex][j] = (val1 - val2) / 2.0;  // High-pass
+				transformedImage[startRow + relativeIndex + half][j] = (val1 + val2) / 2.0;  // Low-pass
+			}
+		}
+		return transformedImage;
+	}
+
+	private void DWT() {
+		redDWT = intToDouble(red);
+		greenDWT = intToDouble(green);
+		blueDWT = intToDouble(blue);
+	
+		int levels = (int) (Math.log(width) / Math.log(2));
+		for (int level = 0; level <= levels; level++) {
+			redDWT = transformColumn(transformRow(redDWT, level), level);
+			greenDWT = transformColumn(transformRow(greenDWT, level), level);
+			blueDWT = transformColumn(transformRow(blueDWT, level), level);
+		}
+	}
+
+	private void truncateCoefficients(double[][] colorChannel, int n) {
+		int sideLength = (int) Math.sqrt(n);
+		int start = height - sideLength;
+	
+		for (int i = 0; i < height; i++) {
+			for (int j = 0; j < width; j++) {
+				if (i < start || j >= sideLength) {
+					colorChannel[i][j] = 0.0;  // Zero out coefficients outside the square
+				}
+			}
+		}
+	}
+
+	private double[][] inverseTransformColumn(double[][] colorChannel, int level) {
+		double[][] decodedImage = new double[height][width];
+	
+		for (int i = 0; i < height; i++) {
+			decodedImage[i] = colorChannel[i].clone();
+		}
+	
+		int dev = (int) Math.pow(2, level);
+		int startRow = height - (height / dev);
+		int endCol = width / dev;
+		int half = (height / dev) / 2;
+	
+		for (int j = 0; j < endCol; j++) {
+			for (int i = startRow; i < startRow + half; i++) {
+				int relativeIndex = i - startRow;
+	
+				double average = colorChannel[startRow + relativeIndex + half][j];
+				double difference = colorChannel[startRow + relativeIndex][j];
+	
+				decodedImage[startRow + 2 * relativeIndex][j] = average + difference;
+				decodedImage[startRow + 2 * relativeIndex + 1][j] = average - difference;
+			}
+		}
+		return decodedImage;
+	}
+
+	private double[][] inverseTransformRow(double[][] colorChannel, int level) {
+		double[][] decodedRow = new double[height][width];
+
+		for (int i = 0; i < height; i++) {
+			decodedRow[i] = colorChannel[i].clone();
+		}
+
+		int dev = (int) Math.pow(2, level);
+		int startRow = height - (height / dev);
+		int endCol = width / dev;
+		int half = endCol / 2;
+
+		for (int i = startRow; i < height; i++) {
+			double[] row = colorChannel[i];
+			for (int j = 0; j < half; j++) {
+				double average = row[j];
+				double difference = row[j + half];
+
+				decodedRow[i][2 * j] = average + difference;
+				decodedRow[i][2 * j + 1] = average - difference;
+			}
+		}
+		return decodedRow;
+	}
+
+	private void IDWT(int n) {
+		truncateCoefficients(redDWT, n);
+		truncateCoefficients(greenDWT, n);
+		truncateCoefficients(blueDWT, n);
+	
+		int levels = (int) (Math.log(width) / Math.log(2));
+		for (int level = levels; level >= 0; level--) {
+			redDWT = inverseTransformRow(inverseTransformColumn(redDWT, level), level);
+			greenDWT = inverseTransformRow(inverseTransformColumn(greenDWT, level), level);
+			blueDWT = inverseTransformRow(inverseTransformColumn(blueDWT, level), level);
+		}
+		red = doubleToInt(redDWT);
+    	green = doubleToInt(greenDWT);
+    	blue = doubleToInt(blueDWT);
+	}
+
+	private void makeImage(int width, int height, BufferedImage img)
+	{
+		for(int y = 0; y < height; y++)
+		{
+			for(int x = 0; x < width; x++)
+			{
+				int r = red[y][x];
+				int g = green[y][x];
+				int b = blue[y][x];
+
+				int pix = 0xff000000 | ((r) << 16) | ((g) << 8) | (b);
+				//int pix = ((a << 24) + (r << 16) + (g << 8) + b);
+				img.setRGB(x,y,pix);
+			}
+		}
+	}
+
+	private void readImageRGB(int width, int height, String imgPath)
+	{
+		try
+		{
+			int frameLength = width*height*3;
+
+			File file = new File(imgPath);
+			RandomAccessFile raf = new RandomAccessFile(file, "r");
+			raf.seek(0);
+
+			long len = frameLength;
+			byte[] bytes = new byte[(int) len];
+
+			raf.read(bytes);
+
+			int ind = 0;
+			for(int y = 0; y < height; y++)
+			{
+				for(int x = 0; x < width; x++)
+				{
+					byte a = 0;
+					byte r = bytes[ind];
+					byte g = bytes[ind+height*width];
+					byte b = bytes[ind+height*width*2];
+					red[y][x] = (r & 0xff); 
+					green[y][x] = (g & 0xff);
+					blue[y][x] = (b & 0xff);
+					// green[y][x] = 0;
+					// blue[y][x] = 0;
+					// int pix = 0xff000000 | ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff);
+					// //int pix = ((a << 24) + (r << 16) + (g << 8) + b);
+					// img.setRGB(x,y,pix);
+					ind++;
+				}
+			}
+		}
+		catch (FileNotFoundException e) 
+		{
+			e.printStackTrace();
+		} 
+		catch (IOException e) 
+		{
+			e.printStackTrace();
+		}
+	}
+
+	
+
+	private JFrame setupFrame() {
+		JFrame frame = new JFrame("DCT(left) and DWT(Right) Comparison");
+		frame.setLayout(new GridLayout(1, 2)); // Side-by-side layout
+		JLabel labelLeft = new JLabel(); // Left image (DCT)
+		JLabel labelRight = new JLabel();
+		frame.add(labelLeft);
+		frame.add(labelRight);
+		frame.setSize(width * 2, height);
+		frame.setVisible(true);
+		return frame;
+	}
+
+	private void animateDCTandDWT(JFrame frame, int[][] originalRed, int[][] originalGreen, int[][] originalBlue) {
+		JLabel labelLeft = (JLabel) frame.getContentPane().getComponent(0);
+		JLabel labelRight = (JLabel) frame.getContentPane().getComponent(1);
+	
+		int dctIteration = 1;
+		int dwtIteration = 0;
+	
+		while (true) {
+			// Animate DCT (Left image)
+			
+			iDCT(dctIteration * 4096); // Decode using first m coefficients
+			makeImage(width, height, imgOne); // Update imgOne
+			labelLeft.setIcon(new ImageIcon(imgOne)); // Update left label
+	
+			// Animate DWT (Right image)
+			dwtIteration = (dwtIteration % 10); // Loop DWT iterations
+			resetRGB(originalRed, originalGreen, originalBlue); // Reset red, green, blue
+			DWT(); // Perform DWT
+			IDWT((int) Math.pow(4, dwtIteration)); // Decode using 4^k coefficients
+			makeImage(width, height, imgTwo); // Update imgTwo
+			labelRight.setIcon(new ImageIcon(imgTwo)); // Update right label
+	
+			// Repaint the frame for both updates
+			frame.repaint();
+	
+			// Delay for animation
+			try {
+				Thread.sleep(200); // 100ms delay between updates
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+			dctIteration = (dctIteration % 64) + 1; // Loop DCT iterations
+			dwtIteration = (dwtIteration % 10) + 1; // Loop DWT iterations
+		}
+	}
+	private void displayDCTandDWT(JFrame frame, int n, int[][] originalRed, int[][] originalGreen, int[][] originalBlue) {
+		JLabel labelLeft = (JLabel) frame.getContentPane().getComponent(0);
+		JLabel labelRight = (JLabel) frame.getContentPane().getComponent(1);
+	
+		// Decode Left Image (DCT)
+		iDCT(n); // Decode using first n coefficients
+		makeImage(width, height, imgOne); // Update imgOne
+		labelLeft.setIcon(new ImageIcon(imgOne)); // Update left label
+	
+		// Decode Right Image (DWT)
+		resetRGB(originalRed, originalGreen, originalBlue); // Reset red, green, blue
+		DWT(); // Perform DWT
+		IDWT(n); // Decode using n coefficients
+		makeImage(width, height, imgTwo); // Update imgTwo
+		labelRight.setIcon(new ImageIcon(imgTwo)); // Update right label
+	
+		// Repaint the frame to display the final result
+		frame.repaint();
+	}
+	private void validateN(int n) {
+		if (n < 4096 || n > 262144 || (n & (n - 1)) != 0) {
+			throw new IllegalArgumentException("Invalid value of n. Must be a power of 4 between 4096 and 262144.");
+		}
+	}
+
+	private int[][] generateIterationMap() {
+		return new int[][]{
+			{22, 24, 30, 32, 55, 56, 62, 64},
+			{21, 23, 29, 31, 53, 54, 61, 63},
+			{18, 20, 26, 28, 50, 52, 58, 60},
+			{17, 19, 25, 27, 49, 51, 57, 59},
+			{6,  8,  14, 16, 38, 40, 46, 48},
+			{5,  7,  13, 15, 37, 39, 45, 47},
+			{2,  4,  10, 12, 34, 36, 42, 44},
+			{1,  3,   9, 11, 33, 35, 41, 43}
+		};
+	}
+
+	private void truncateDWT(double[][] colorChannel, int numCoefficients) {
+		int totalCoefficients = 0;
+		int size = colorChannel.length; // Assuming a square DWT matrix
+		int level = 0;
+	
+		// Retain coefficients level by level
+		while (totalCoefficients < numCoefficients) {
+			int blockSize = size >> level; // Size of the current block (e.g., 512, 256, 128, ...)
+			int startRow = size - blockSize;
+			int endRow = size;
+			int startCol = 0;
+			int endCol = blockSize;
+	
+			for (int row = startRow; row < endRow && totalCoefficients < numCoefficients; row++) {
+				for (int col = startCol; col < endCol && totalCoefficients < numCoefficients; col++) {
+					if (colorChannel[row][col] != 0) {
+						totalCoefficients++;
+					}
+				}
+			}
+	
+			// Move to the next level of detail
+			level++;
+		}
+	
+		// Zero out unused coefficients
+		for (int row = 0; row < size; row++) {
+			for (int col = 0; col < size; col++) {
+				if (row >= size - (size >> level) && col < (size >> level)) {
+					continue; // Retain coefficients in the active region
+				}
+				colorChannel[row][col] = 0.0;
+			}
+		}
+	}
+
+	private void animate64Iterations(JFrame frame, int[][] originalRed, int[][] originalGreen, int[][] originalBlue) {
+		JLabel labelLeft = (JLabel) frame.getContentPane().getComponent(0);
+		JLabel labelRight = (JLabel) frame.getContentPane().getComponent(1);
+	
+		int iteration = 0;
+	
+		while (true) {
+			iteration = (iteration % 64) + 1; // Loop 64 iterations
+	
+			// Decode Left Image (DCT)
+			int dctCoefficients = iteration * 4096;
+			iDCT(dctCoefficients); 
+			makeImage(width, height, imgOne);
+			labelLeft.setIcon(new ImageIcon(imgOne));
+	
+			// Decode Right Image (DWT)
+			int dwtCoefficients = iteration * 4096;
+			resetRGB(originalRed, originalGreen, originalBlue);
+			DWT(); // Perform DWT
+			truncateDWT(redDWT, dwtCoefficients);
+			truncateDWT(greenDWT, dwtCoefficients);
+			truncateDWT(blueDWT, dwtCoefficients);
+			IDWT(dwtCoefficients);
+			makeImage(width, height, imgTwo); // Update imgTwo
+			labelRight.setIcon(new ImageIcon(imgTwo));
+	
+			// Repaint the frame for both updates
+			frame.repaint();
+	
+			try {
+				Thread.sleep(100); // 100ms delay between updates
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
+	public void showIms(String[] args) {
+		imgOne = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+		imgTwo = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+	
+		// Read the input image
+		readImageRGB(width, height, args[0]);
+		DCT(); // Perform DCT once
+	
+		// Create a separate static copy for DWT
+		int[][] originalRed = copyArray(red);
+		int[][] originalGreen = copyArray(green);
+		int[][] originalBlue = copyArray(blue);
+	
+		// Parse the parameter n
+		int n = Integer.parseInt(args[1]);
+	
+		// Set up JFrame and labels
+		JFrame frame = setupFrame();
+	
+		if (n == -1) {
+			animateDCTandDWT(frame, originalRed, originalGreen, originalBlue);
+		} else if (n == -2) {
+			animate64Iterations(frame, originalRed, originalGreen, originalBlue);
+		} else {
+			validateN(n);
+			displayDCTandDWT(frame, n, originalRed, originalGreen, originalBlue);
+		}
+	}
+	public static void main(String[] args) {
+		ImageDisplay ren = new ImageDisplay();
+		ren.showIms(args);
+	}
+
+}
